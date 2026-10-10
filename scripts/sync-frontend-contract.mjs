@@ -1,0 +1,7 @@
+import { copyFile, mkdir, readFile, writeFile } from "node:fs/promises";
+import { resolve } from "node:path";
+const address = process.argv[2];
+if (!/^0x[a-fA-F0-9]{40}$/.test(address ?? "")) throw new Error("Usage: pnpm sync:frontend <deployed WarrantyNFT address>");
+const root = process.cwd(), artifact = resolve(root, "artifacts/contracts/WarrantyNFT.sol/WarrantyNFT.json"), frontend = resolve(root, "frontend");
+await mkdir(resolve(frontend, "src/contracts"), { recursive: true }); await copyFile(artifact, resolve(frontend, "src/contracts/WarrantyNFT.json")); await writeFile(resolve(frontend, ".env.local"), `VITE_WARRANTY_NFT_ADDRESS=${address}\n`);
+console.log(`Synced ${JSON.parse(await readFile(artifact, "utf8")).abi.length} ABI entries and ${address} to frontend/.env.local`);
