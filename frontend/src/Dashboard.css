@@ -9,6 +9,7 @@
 .brand { display: flex; align-items: center; gap: 10px; color: var(--text); font-weight: 800; text-decoration: none; }
 .brand-mark { display:grid; place-items:center; width:32px; height:32px; border-radius:9px; background:var(--lime); color:#182219; }
 .brand-accent { color: var(--lime); }
+.brand-logo { width: 100%; max-width: 180px; height: auto; object-fit: contain; display: block; }
 .nav-label { margin: 30px 10px 8px; color:#71878a; font-size:10px; font-weight:800; letter-spacing:.12em; text-transform:uppercase; }
 .nav { display:grid; gap:4px; }
 .nav a { display:flex; align-items:center; gap:11px; min-height:43px; padding:0 12px; border-radius:8px; color:#91a7aa; font-size:13px; font-weight:700; text-decoration:none; }
