@@ -15,6 +15,10 @@ const revertData = (error) => (
 );
 
 export const errorMessage = (error) => {
+  const providerMessage = error?.info?.error?.message || error?.message || ""
+  if (providerMessage.toLowerCase().includes("function selector was not recognized")) {
+    return "This contract deployment does not include the repair feature. Redeploy WarrantyNFT with --reset, then run pnpm sync:frontend with the new address."
+  }
   const data = revertData(error);
   if (typeof data === "string" && data.startsWith("0x")) {
     try {
@@ -53,6 +57,9 @@ export const errorMessage = (error) => {
     }
   }
   const message = error?.shortMessage || error?.reason || error?.message;
+  if (message?.toLowerCase().includes("no data present") || message?.toLowerCase().includes("require(false)")) {
+    return "The transaction was rejected without details. Confirm the connected wallet, token ID, repair category, and configured contract deployment."
+  }
   if (message && !message.toLowerCase().includes("unknown custom error")) return message;
   return "Transaction failed."
 };

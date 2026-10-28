@@ -1,0 +1,244 @@
+import { useEffect, useState } from 'react'
+import { BrowserProvider, Contract, JsonRpcProvider, ZeroAddress, isAddress } from 'ethers'
+import { QRCodeSVG } from 'qrcode.react'
+import { ABI, CHAIN_ID, CONTRACT_ADDRESS, RPC_URL, isConfigured } from './config/contract'
+import { errorMessage, formatDate, shortAddress } from './lib/warranty'
+import './App.css'
+
+const verificationUrl = (tokenId) => {
+  const configuredOrigin = import.meta.env.VITE_PUBLIC_APP_URL?.trim().replace(/\/+$/, '')
+  return `${configuredOrigin || window.location.origin}/verify/${tokenId}`
+}
+
+function Dashboard() {
+  const [account, setAccount] = useState('')
+  const [notice, setNotice] = useState('')
+  const [token, setToken] = useState('')
+  const [record, setRecord] = useState(null)
+  const [claimRecord, setClaimRecord] = useState(null)
+  const [busy, setBusy] = useState(false)
+  const [roles, setRoles] = useState({ manufacturer: false, service: false })
+
+  const read = () => new Contract(CONTRACT_ADDRESS, ABI, new JsonRpcProvider(RPC_URL))
+  const walletProvider = async () => {
+    if (!window.ethereum) throw Error('MetaMask is not installed.')
+    const provider = new BrowserProvider(window.ethereum)
+    const network = await provider.getNetwork()
+    if (Number(network.chainId) !== CHAIN_ID) {
+      throw Error(`Wrong network in MetaMask. Select chain ID ${CHAIN_ID}, then try again.`)
+    }
+    return provider
+  }
+  const signer = async () => {
+    if (!isConfigured) throw Error('Deploy locally and run pnpm sync:frontend <address>.')
+    return new Contract(CONTRACT_ADDRESS, ABI, await (await walletProvider()).getSigner())
+  }
+  const run = async (work, success) => {
+    try {
+      setBusy(true)
+      setNotice('Waiting for confirmation…')
+      const tx = await work()
+      const receipt = await tx.wait()
+      setNotice(typeof success === 'function' ? success(receipt) : success)
+    } catch (e) {
+      setNotice(errorMessage(e))
+    } finally {
+      setBusy(false)
+    }
+  }
+  const verify = async (e) => {
+    e.preventDefault()
+    try {
+      const c = read()
+      const id = BigInt(token)
+      if (id < 1n) throw Error('Enter a token ID of 1 or higher.')
+      const supply = await c.totalSupply()
+      if (id > supply) throw Error(`Token #${id} does not exist yet. Mint a warranty first, then verify it here.`)
+      const [product, owner, active, claims] = await Promise.all([
+        c.getProduct(id),
+        c.ownerOf(id),
+        c.isWarrantyActive(id),
+        c.getClaimsForToken(id),
+      ])
+      setRecord({ id, product, owner, active, claims })
+      setNotice('')
+    } catch (e) {
+      setRecord(null)
+      setNotice(errorMessage(e))
+    }
+  }
+  const viewClaim = async (e) => {
+    e.preventDefault()
+    try {
+      const form = new FormData(e.currentTarget)
+      const id = BigInt(form.get('claimLookup'))
+      if (id < 1n) throw Error('Enter a claim ID of 1 or higher.')
+      const claim = await read().getClaim(id)
+      setClaimRecord({ id, claim })
+      setNotice('')
+    } catch (e) {
+      setClaimRecord(null)
+      setNotice(errorMessage(e))
+    }
+  }
+  const connect = async () => {
+    try {
+      await walletProvider()
+      const a = await window.ethereum.request({ method: 'eth_requestAccounts' })
+      setAccount(a[0] || '')
+      setNotice(`Wallet connected on chain ${CHAIN_ID}.`)
+    } catch (e) {
+      setNotice(errorMessage(e))
+    }
+  }
+
+  useEffect(() => {
+    if (!window.ethereum) return
+    const changed = (a) => setAccount(a[0] || '')
+    window.ethereum.on('accountsChanged', changed)
+    return () => window.ethereum.removeListener('accountsChanged', changed)
+  }, [])
+
+  useEffect(() => {
+    let active = true
+    if (!account || !isConfigured) {
+      return () => { active = false }
+    }
+    Promise.all([read().MANUFACTURER_ROLE(), read().SERVICE_ROLE()])
+      .then(async ([manufacturerRole, serviceRole]) => {
+        const contract = read()
+        const [manufacturer, service] = await Promise.all([
+          contract.hasRole(manufacturerRole, account),
+          contract.hasRole(serviceRole, account),
+        ])
+        if (active) setRoles({ manufacturer, service })
+      })
+      .catch(() => { if (active) setRoles({ manufacturer: false, service: false }) })
+    return () => { active = false }
+  }, [account])
+
+  return (
+    <main className="app-shell">
+      <header className="topbar">
+        <a className="brand" href="/" aria-label="WarrantyChain home">
+          <span className="brand-mark">W</span>
+          <span>Warranty<span className="brand-accent">Chain</span></span>
+        </a>
+        <div className="network-status"><span className="status-dot" /> Local network · {CHAIN_ID}</div>
+        <div className="wallet-context">
+          {account && <span className="role-badges"><span className={roles.manufacturer ? 'role-badge active' : 'role-badge'}>Manufacturer</span><span className={roles.service ? 'role-badge active' : 'role-badge'}>Service</span></span>}
+        </div>
+        <button className="wallet-button" onClick={connect}>
+          <span className="wallet-icon">◈</span>
+          {account ? shortAddress(account) : 'Connect wallet'}
+        </button>
+      </header>
+
+      <section className="hero">
+        <div className="hero-copy">
+          <p className="eyebrow"><span /> Ownership, verified on-chain</p>
+          <h1>Warranty records that travel with the product.</h1>
+          <p className="hero-description">A transparent home for product warranties. Mint a durable record, transfer it with ownership, and keep every claim visible.</p>
+          <div className="hero-stats">
+            <span><strong>01</strong> Verify instantly</span>
+            <span><strong>02</strong> Transfer securely</span>
+            <span><strong>03</strong> Resolve fairly</span>
+          </div>
+        </div>
+        <div className="hero-orbit" aria-hidden="true"><span className="orbit-core">W</span><span className="orbit-ring ring-one" /><span className="orbit-ring ring-two" /></div>
+      </section>
+
+      {!isConfigured && <p className="notice warning"><span>!</span> Contract not configured. Start a node, deploy, then run <code>pnpm sync:frontend &lt;address&gt;</code>.</p>}
+      {notice && <div className="dialog-backdrop" role="presentation">
+        <section className="info-dialog" role="dialog" aria-modal="true" aria-labelledby="notice-title">
+          <button className="dialog-close" type="button" onClick={() => setNotice('')} aria-label="Close dialog">×</button>
+          <span className="dialog-icon">✓</span>
+          <p className="section-kicker">Transaction update</p>
+          <h2 id="notice-title">WarrantyChain</h2>
+          <p className="dialog-message">{notice}</p>
+          <button className="primary-button dialog-action" type="button" onClick={() => setNotice('')}>Continue</button>
+        </section>
+      </div>}
+
+      <section className="panel verification-panel">
+        <div className="panel-heading"><div><p className="section-kicker">Open ledger</p><h2>Public warranty verification</h2></div><span className="panel-number">01</span></div>
+        <p className="panel-intro">Enter a token ID to inspect its product details, current owner, expiry, and claim history.</p>
+        <form className="inline-form" onSubmit={verify}>
+          <label>Token ID<input required value={token} onChange={(e) => setToken(e.target.value)} placeholder="e.g. 1" /></label>
+          <button disabled={busy}>Verify on-chain <span>↗</span></button>
+        </form>
+        {record && <Card item={record} />}
+      </section>
+
+      <section className="action-grid">
+        <section className="panel action-panel customer-panel">
+          <div className="panel-heading"><div><p className="section-kicker">For customers</p><h2>Manage your warranty</h2></div><span className="panel-number">02</span></div>
+          <p className="panel-intro">Transfer an owned warranty or submit a claim directly from your connected wallet.</p>
+          <form onSubmit={(e) => { e.preventDefault(); const f = new FormData(e.currentTarget); const to = f.get('to'); if (!isAddress(to) || to === ZeroAddress) return setNotice('Use a valid nonzero recipient.'); run(async () => (await signer())['safeTransferFrom(address,address,uint256)'](account, to, BigInt(f.get('id'))), 'Warranty transferred.') }}>
+            <div className="form-title"><span className="form-icon">↗</span><span>Transfer ownership</span></div>
+            <label>Token ID<input name="id" required placeholder="Token number" /></label>
+            <label>Recipient address<input name="to" required placeholder="0x..." /></label>
+            <button className="secondary-button" disabled={busy}>Transfer warranty</button>
+          </form>
+          <form onSubmit={(e) => { e.preventDefault(); const f = new FormData(e.currentTarget); run(async () => (await signer()).submitClaim(BigInt(f.get('id')), f.get('description')), (receipt) => { const event = receipt.logs.map((log) => { try { return new Contract(CONTRACT_ADDRESS, ABI).interface.parseLog(log) } catch { return null } }).find((parsed) => parsed?.name === 'ClaimSubmitted'); return event ? `Claim #${event.args.claimId.toString()} submitted successfully.` : 'Claim submitted successfully.' }) }}>
+            <div className="form-title"><span className="form-icon">+</span><span>Open a claim</span></div>
+            <label>Token ID<input name="id" required placeholder="Token number" /></label>
+            <label>Claim description<input name="description" required placeholder="What needs attention?" /></label>
+            <button className="secondary-button" disabled={busy}>Submit claim</button>
+          </form>
+        </section>
+
+        <section className="panel action-panel manufacturer-panel">
+          <div className="panel-heading"><div><p className="section-kicker">For manufacturers</p><h2>Issue & resolve</h2></div><span className="panel-number">03</span></div>
+          <p className="panel-intro">Create a new warranty NFT and keep the customer journey moving with claim updates.</p>
+          <form onSubmit={(e) => { e.preventDefault(); const f = new FormData(e.currentTarget); run(async () => (await signer()).registerProduct(f.get('recipient'), f.get('name'), f.get('model'), f.get('serial'), BigInt(f.get('days')) * 86400n, f.get('uri')), (receipt) => { const event = receipt.logs.map((log) => { try { return new Contract(CONTRACT_ADDRESS, ABI).interface.parseLog(log) } catch { return null } }).find((parsed) => parsed?.name === 'ProductRegistered'); return event ? `Warranty NFT #${event.args.tokenId.toString()} minted successfully.` : 'Warranty NFT minted successfully.' }) }}>
+            <div className="form-title"><span className="form-icon">✦</span><span>Register a product</span></div>
+            <div className="field-grid">{[['recipient', 'Customer address'], ['name', 'Product name'], ['model', 'Model'], ['serial', 'Unique serial'], ['days', 'Warranty days'], ['uri', 'Metadata URI (optional)']].map(([n, l]) => <label key={n}>{l}<input name={n} required={n !== 'uri'} placeholder={n === 'recipient' ? '0x...' : l} /></label>)}</div>
+            <button className="primary-button" disabled={busy}>Register & mint <span>↗</span></button>
+          </form>
+          <form onSubmit={(e) => { e.preventDefault(); const f = new FormData(e.currentTarget); run(async () => (await signer()).updateClaimStatus(BigInt(f.get('claim')), Number(f.get('status'))), 'Claim status updated.') }}>
+            <div className="form-title"><span className="form-icon">✓</span><span>Update a claim</span></div>
+            <div className="field-grid two-fields"><label>Claim ID<input name="claim" required placeholder="Claim number" /></label><label>Status<select name="status"><option value="1">Approved</option><option value="2">Rejected</option><option value="3">Resolved</option></select></label></div>
+            <button className="secondary-button" disabled={busy}>Update claim</button>
+          </form>
+          <form onSubmit={(e) => { e.preventDefault(); const f = new FormData(e.currentTarget); run(async () => { const tokenId = BigInt(f.get('repairToken')); const category = String(f.get('category') || '').trim(); if (tokenId < 1n) throw Error('Enter a token ID of 1 or higher.'); if (!category) throw Error('Enter a repair category.'); const publicContract = read(); const supply = await publicContract.totalSupply(); if (tokenId > supply) throw Error(`Warranty token #${tokenId} does not exist on ${CONTRACT_ADDRESS}.`); const contract = await signer(); const wallet = await contract.runner.getAddress(); const role = await contract.SERVICE_ROLE(); const authorized = await contract.hasRole(role, wallet); if (!authorized) throw Error(`Connected wallet ${wallet} does not have SERVICE_ROLE on ${CONTRACT_ADDRESS}.`); return contract.completeRepair(tokenId, category, String(f.get('reference') || '')) }, (receipt) => { const event = receipt.logs.map((log) => { try { return new Contract(CONTRACT_ADDRESS, ABI).interface.parseLog(log) } catch { return null } }).find((parsed) => parsed?.name === 'ServiceCompleted'); return event ? `Repair record #${event.args.recordId.toString()} added successfully.` : 'Repair record added successfully.' }) }}>
+            <div className="form-title"><span className="form-icon">⚒</span><span>Record completed repair</span></div>
+            <p className="form-help">Connected service wallet: {account ? account : 'Connect wallet first'}</p>
+            <label>Token ID<input name="repairToken" required placeholder="Warranty token number" /></label>
+            <label>Repair category<input name="category" required placeholder="e.g. Motor replacement" /></label>
+            <label>Report reference (optional)<input name="reference" placeholder="Public hash or URI" /></label>
+            <button className="secondary-button" disabled={busy}>Add service record</button>
+          </form>
+          <form onSubmit={viewClaim}>
+            <div className="form-title"><span className="form-icon">⌕</span><span>View a claim</span></div>
+            <div className="inline-form claim-lookup"><label>Claim ID<input name="claimLookup" required placeholder="Claim number" /></label><button className="secondary-button" disabled={busy}>View claim</button></div>
+          </form>
+          <form onSubmit={(e) => { e.preventDefault(); const f = new FormData(e.currentTarget); const serviceAccount = f.get('serviceAccount'); if (!roles.manufacturer) return setNotice('Connect the manufacturer wallet that deployed this contract before granting or revoking SERVICE_ROLE.'); if (!isAddress(serviceAccount) || serviceAccount === ZeroAddress) return setNotice('Use a valid nonzero service-account address.'); run(async () => (await signer()).setServiceAccount(serviceAccount, f.get('enabled') === 'true'), (receipt) => { const event = receipt.logs.map((log) => { try { return new Contract(CONTRACT_ADDRESS, ABI).interface.parseLog(log) } catch { return null } }).find((parsed) => parsed?.name === 'ServiceAccountUpdated'); return event ? `${serviceAccount} ${event.args.enabled ? 'can now' : 'can no longer'} record repairs.` : 'Service account updated successfully.' }) }}>
+            <div className="form-title"><span className="form-icon">⚿</span><span>Manage service account</span></div>
+            <p className="form-help">The connected manufacturer wallet must have MANUFACTURER_ROLE.</p>
+            <label>Service account address<input name="serviceAccount" required placeholder="0x..." /></label>
+            <label>Access<select name="enabled" defaultValue="true"><option value="true">Grant SERVICE_ROLE</option><option value="false">Revoke SERVICE_ROLE</option></select></label>
+            <button className="secondary-button" disabled={busy}>Update service access</button>
+          </form>
+          {claimRecord && <ClaimCard item={claimRecord} />}
+        </section>
+      </section>
+      <footer><span>WarrantyChain</span><span>Built for transparent ownership</span><span>Chain ID {CHAIN_ID}</span></footer>
+    </main>
+  )
+}
+
+function Card({ item }) {
+  const p = item.product
+  const url = verificationUrl(item.id.toString())
+  return <article className="record-card"><div className="record-topline"><span className={`record-status ${item.active ? 'active' : 'expired'}`}><span />{item.active ? 'Active warranty' : 'Expired warranty'}</span><span className="record-id">NFT #{item.id.toString()}</span></div><div className="record-with-qr"><div><h3>{p.name} <small>{p.model}</small></h3><div className="record-details"><span><small>Serial number</small>{p.serialNumber}</span><span><small>Current owner</small>{shortAddress(item.owner)}</span><span><small>Valid until</small>{formatDate(p.warrantyExpiry)}</span><span><small>Claims filed</small>{item.claims.length}</span></div></div><div className="qr-block"><QRCodeSVG value={url} size={92} bgColor="#edf5f1" fgColor="#081317" level="M" /><small>Scan to verify</small></div></div></article>
+}
+
+function ClaimCard({ item }) {
+  const claim = item.claim
+  const statuses = ['Pending', 'Approved', 'Rejected', 'Resolved']
+  const status = statuses[Number(claim.status)] || 'Unknown'
+  return <article className="claim-card"><div className="record-topline"><span className={`claim-status ${status.toLowerCase()}`}>{status}</span><span className="record-id">Claim #{item.id.toString()}</span></div><p className="claim-description">“{claim.description}”</p><div className="claim-meta"><span><small>Warranty NFT</small>#{claim.tokenId.toString()}</span><span><small>Submitted</small>{formatDate(claim.submittedAt)}</span><span><small>Last updated</small>{formatDate(claim.updatedAt)}</span></div></article>
+}
+
+export default Dashboard

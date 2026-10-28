@@ -36,6 +36,15 @@ contract WarrantyNFT is ERC721Enumerable, AccessControl {
         ClaimStatus status;
     }
 
+    struct ServiceRecord {
+        uint256 recordId;
+        uint256 tokenId;
+        uint64 serviceDate;
+        address serviceCenter;
+        string repairCategory;
+        string reportReference;
+    }
+
     // --- Custom Errors ---
     error InvalidRecipient();
     error RequiredFieldMissing();
@@ -50,11 +59,13 @@ contract WarrantyNFT is ERC721Enumerable, AccessControl {
     // --- State Variables ---
     uint256 private _nextTokenId = 1;
     uint256 private _nextClaimId = 1;
+    uint256 private _nextServiceRecordId = 1;
 
     mapping(uint256 => Product) private _products;
     mapping(bytes32 => bool) private _serialRegistered;
     mapping(uint256 => Claim) private _claims;
     mapping(uint256 => uint256[]) private _claimIdsByToken;
+    mapping(uint256 => ServiceRecord[]) private _serviceRecordsByToken;
     mapping(address => uint256[]) private _registeredTokenIds;
 
     // --- Events ---
@@ -79,6 +90,14 @@ contract WarrantyNFT is ERC721Enumerable, AccessControl {
         address updatedBy
     );
     event ServiceAccountUpdated(address indexed account, bool enabled);
+    event ServiceCompleted(
+        uint256 indexed recordId,
+        uint256 indexed tokenId,
+        address indexed serviceCenter,
+        uint64 serviceDate,
+        string repairCategory,
+        string reportReference
+    );
 
     constructor() ERC721("WarrantyChain Warranty", "WARRANTY") {
         _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
@@ -182,6 +201,22 @@ contract WarrantyNFT is ERC721Enumerable, AccessControl {
         emit ClaimStatusUpdated(claimId, claim.tokenId, previousStatus, newStatus, msg.sender);
     }
 
+    function completeRepair(
+        uint256 tokenId,
+        string calldata repairCategory,
+        string calldata reportReference
+    ) external onlyRole(SERVICE_ROLE) returns (uint256 recordId) {
+        _requireProduct(tokenId);
+        if (bytes(repairCategory).length == 0) revert RequiredFieldMissing();
+
+        recordId = _nextServiceRecordId++;
+        uint64 serviceDate = uint64(block.timestamp);
+        _serviceRecordsByToken[tokenId].push(
+            ServiceRecord(recordId, tokenId, serviceDate, msg.sender, repairCategory, reportReference)
+        );
+        emit ServiceCompleted(recordId, tokenId, msg.sender, serviceDate, repairCategory, reportReference);
+    }
+
     // --- View Functions ---
 
     function getProduct(uint256 tokenId) external view returns (Product memory) {
@@ -220,6 +255,30 @@ contract WarrantyNFT is ERC721Enumerable, AccessControl {
 
     function totalClaims() external view returns (uint256) {
         return _nextClaimId - 1;
+    }
+
+    function serviceRecordCount(uint256 tokenId) external view returns (uint256) {
+        _requireProduct(tokenId);
+        return _serviceRecordsByToken[tokenId].length;
+    }
+
+    function getServiceRecord(uint256 tokenId, uint256 index)
+        external
+        view
+        returns (ServiceRecord memory)
+    {
+        _requireProduct(tokenId);
+        return _serviceRecordsByToken[tokenId][index];
+    }
+
+    function tokenURI(uint256 tokenId)
+        public
+        view
+        override
+        returns (string memory)
+    {
+        _requireProduct(tokenId);
+        return _products[tokenId].metadataURI;
     }
 
     // --- Internal Helpers & Overrides ---

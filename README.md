@@ -38,7 +38,7 @@ pnpm deploy:local
 Copy the deployed address into the frontend configuration:
 
 ```shell
-pnpm sync:frontend <deployed-contract-address>
+pnpm sync:frontend <deployed-contract-address> [deployment-block]
 ```
 
 Start the frontend:
@@ -67,7 +67,27 @@ The frontend can also be configured manually with `frontend/.env.local`:
 VITE_WARRANTY_NFT_ADDRESS=0x...
 VITE_RPC_URL=http://127.0.0.1:8545
 VITE_CHAIN_ID=31337
+VITE_PUBLIC_APP_URL=https://warranty.example.com
+VITE_DEPLOYMENT_BLOCK=0
 ```
+
+`VITE_PUBLIC_APP_URL` is optional. When it is empty, QR codes use the current browser origin. Set it to the deployed frontend origin when the app is behind a proxy or deployed under a different public URL.
+`VITE_DEPLOYMENT_BLOCK` should be set to the block where `WarrantyNFT` was deployed in production. The synchronization command accepts it as an optional second argument and defaults to `0` for local development.
+
+The warranty details card includes a QR code pointing to `/verify/<tokenId>`. The public verification page does not require MetaMask; it reads the record through the configured RPC provider. The QR code is only a link to the blockchain record and is not proof of physical authenticity.
+
+Repair records are append-only and can be created only by accounts granted the existing `SERVICE_ROLE`. Service dates, service-center addresses, repair categories, and optional report references are public on-chain data; do not put confidential customer information or private documents directly on-chain.
+
+The manufacturer can grant a repair center the existing role with `setServiceAccount(address, true)`. That service account can then use **Record completed repair** in the dashboard. The public verification timeline combines ERC-721 transfers, warranty registration, claim submission/status events, and completed repairs from the configured deployment block.
+
+When contract functions change during local development, force a fresh Ignition deployment before syncing the frontend:
+
+```shell
+pnpm exec hardhat ignition deploy ignition/modules/WarrantyNFT.ts --network localhost --reset
+pnpm sync:frontend <new-deployed-contract-address> [deployment-block]
+```
+
+Resetting a local deployment creates a new contract address and does not preserve the old local tokens, roles, claims, or repairs.
 
 ## Development commands
 
