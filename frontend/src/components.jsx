@@ -1,7 +1,9 @@
 import { Component, useState } from 'react'
 import { Link, NavLink } from 'react-router-dom'
+import { QRCodeSVG } from 'qrcode.react'
 import { shortAddress } from './lib/warranty'
 import { CHAIN_ID } from './config/contract'
+import { verificationUrl } from './lib/verification'
 import logoImg from './assets/logo.jpg'
 
 export function Status({ value }) {
@@ -12,6 +14,10 @@ export function Status({ value }) {
 }
 export function Notice({ type='info', children }) { return children ? <div className={`notice ${type}`}>{children}</div> : null }
 export function Empty({ title='Nothing here yet', children }) { return <div className="empty"><strong>{title}</strong><span>{children}</span></div> }
+export function VerificationQr({ tokenId, size = 92 }) {
+  const url = verificationUrl(tokenId)
+  return <div className="qr-block" aria-label={`QR code for public verification of warranty token ${tokenId}`}><QRCodeSVG value={url} size={size} bgColor="#edf5f1" fgColor="#081317" level="M" /><small>Scan to verify</small></div>
+}
 export function ConfirmDialog({ open, title='Confirm transaction', children, confirm='Confirm', busy=false, onConfirm, onClose }) { if(!open)return null; return <div className="modal-backdrop" role="presentation"><section className="modal" role="dialog" aria-modal="true"><h2>{title}</h2><div className="muted">{children}</div><div className="modal-actions"><button className="secondary" onClick={onClose} disabled={busy}>Cancel</button><button className="primary" onClick={onConfirm} disabled={busy}>{busy?'Pending…':confirm}</button></div></section></div> }
 
 export function Shell({ account, roles, connect, disconnect, mismatched, children }) {

@@ -31,6 +31,7 @@ function AppRoutes() {
 
     <Route path="/customer" element={guarded('customer', <CustomerOverview />)} />
     <Route path="/customer/products" element={guarded('customer', <CustomerProducts />)} />
+    <Route path="/products" element={guarded('customer', <CustomerProducts />)} />
     <Route path="/customer/claims" element={guarded('customer', <CustomerClaims />)} />
     <Route path="/customer/transfer" element={guarded('customer', <Transfer />)} />
 
