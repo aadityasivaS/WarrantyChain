@@ -47,7 +47,16 @@ export function WalletProvider({ children }) {
     const onChain = (hex) => setChainId(Number.parseInt(hex, 16))
     ethereum.on('accountsChanged', onAccounts)
     ethereum.on('chainChanged', onChain)
-    ethereum.request({ method: 'eth_accounts' }).then(([address]) => { if (address) { setAccount(address); refreshRoles(address); onChain('0x' + CHAIN_ID.toString(16)) } })
+    Promise.all([
+      ethereum.request({ method: 'eth_accounts' }),
+      ethereum.request({ method: 'eth_chainId' }),
+    ]).then(async ([[address], hexChainId]) => {
+      if (address) {
+        setAccount(address)
+        await refreshRoles(address)
+      }
+      onChain(hexChainId)
+    })
     return () => { ethereum.removeListener('accountsChanged', onAccounts); ethereum.removeListener('chainChanged', onChain) }
   }, [])
 

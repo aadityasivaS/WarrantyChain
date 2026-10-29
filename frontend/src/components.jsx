@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { Component, useState } from 'react'
 import { Link, NavLink } from 'react-router-dom'
 import { shortAddress } from './lib/warranty'
 import { CHAIN_ID } from './config/contract'
@@ -24,3 +24,25 @@ const manufacturerLinks=[['/manufacturer','Overview','◫'],['/manufacturer/prod
 const serviceLinks=[['/service','Overview','◫'],['/service/verify','Verify warranty','⌕'],['/service/records','Repair records','⚒']]
 export function PageHeading({ title, description, action }) { return <div className="page-heading"><div><h1>{title}</h1><p>{description}</p></div>{action}</div> }
 export function SkeletonGrid(){return <div className="metric-grid">{[1,2,3,4].map(i=><div className="skeleton" key={i}/>)}</div>}
+
+export class AppErrorBoundary extends Component {
+  state = { error: null }
+
+  static getDerivedStateFromError(error) {
+    return { error }
+  }
+
+  render() {
+    if (!this.state.error) return this.props.children
+    return (
+      <main className="app-shell">
+        <section className="card access">
+          <p className="kicker">WarrantyChain</p>
+          <h1>This page could not be displayed</h1>
+          <p>Something went wrong while rendering this view. Refresh the page and check that your wallet is connected to the configured network.</p>
+          <button className="primary" type="button" onClick={() => window.location.reload()}>Reload page</button>
+        </section>
+      </main>
+    )
+  }
+}

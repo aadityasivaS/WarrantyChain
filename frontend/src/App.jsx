@@ -1,5 +1,5 @@
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
-import { Shell } from './components'
+import { AppErrorBoundary, Shell } from './components'
 import './Dashboard.css'
 import { WalletProvider, useWallet } from './lib/wallet'
 import { CHAIN_ID } from './config/contract'
@@ -50,5 +50,5 @@ function AppRoutes() {
 }
 
 export default function App() {
-  return <BrowserRouter><WalletProvider><AppRoutes /></WalletProvider></BrowserRouter>
+  return <AppErrorBoundary><BrowserRouter><WalletProvider><AppRoutes /></WalletProvider></BrowserRouter></AppErrorBoundary>
 }
