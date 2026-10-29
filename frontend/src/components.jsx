@@ -4,7 +4,12 @@ import { shortAddress } from './lib/warranty'
 import { CHAIN_ID } from './config/contract'
 import logoImg from './assets/logo.jpg'
 
-export function Status({ value }) { const labels=['Pending','Approved','Rejected','Resolved']; const label=typeof value==='number'||typeof value==='bigint'?labels[Number(value)]:String(value); return <span className={`status ${label.toLower()}`}>{label}</span> }
+export function Status({ value }) {
+  const labels = ['Pending', 'Approved', 'Rejected', 'Resolved']
+  const numeric = typeof value === 'number' || typeof value === 'bigint' ? Number(value) : null
+  const label = numeric !== null && labels[numeric] ? labels[numeric] : String(value ?? 'Unknown')
+  return <span className={`status ${label.toLowerCase()}`}>{label}</span>
+}
 export function Notice({ type='info', children }) { return children ? <div className={`notice ${type}`}>{children}</div> : null }
 export function Empty({ title='Nothing here yet', children }) { return <div className="empty"><strong>{title}</strong><span>{children}</span></div> }
 export function ConfirmDialog({ open, title='Confirm transaction', children, confirm='Confirm', busy=false, onConfirm, onClose }) { if(!open)return null; return <div className="modal-backdrop" role="presentation"><section className="modal" role="dialog" aria-modal="true"><h2>{title}</h2><div className="muted">{children}</div><div className="modal-actions"><button className="secondary" onClick={onClose} disabled={busy}>Cancel</button><button className="primary" onClick={onConfirm} disabled={busy}>{busy?'Pending…':confirm}</button></div></section></div> }
